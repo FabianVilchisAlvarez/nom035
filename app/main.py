@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.database.connection import engine
 from app.database.base import Base
 
-# 🔥 IMPORTAR MODELOS (necesario para SQLAlchemy)
+# 🔥 IMPORTAR MODELOS
 from app.models.usuario import Usuario
 from app.models.empresa import Empresa
 from app.models.evaluacion import Evaluacion
@@ -45,7 +45,7 @@ if settings.ENV == "development":
     Base.metadata.create_all(bind=engine)
 
 # =========================
-# 🌐 CORS (SEGURO)
+# 🌐 CORS
 # =========================
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +56,7 @@ app.add_middleware(
 )
 
 # =========================
-# 🔥 ROUTERS (FIX AQUÍ)
+# 🔥 ROUTERS
 # =========================
 app.include_router(auth.router)
 app.include_router(evaluaciones.router)
@@ -65,13 +65,16 @@ app.include_router(respuestas.router)
 app.include_router(resultados.router)
 app.include_router(ia.router)
 app.include_router(reportes.router)
-
-# 👉 🔥 ESTE ES EL FIX
 app.include_router(pagos.router, prefix="/pagos", tags=["Pagos"])
 
 # =========================
-# ❤️ HEALTH CHECK
+# ❤️ HEALTH CHECK (RENDER)
 # =========================
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+# (opcional mantener este)
 @app.get("/health")
 def health():
     return {"status": "ok"}
