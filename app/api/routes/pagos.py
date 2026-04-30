@@ -50,7 +50,7 @@ def obtener_plan_por_empleados(empleados: int) -> str:
 
 
 # =========================
-# 🔥 STRIPE WEBHOOK (FIX DUPLICADOS)
+# 🔥 STRIPE WEBHOOK (PRO FIX FINAL)
 # =========================
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
@@ -68,8 +68,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         )
 
     except Exception as e:
-        print("❌ Error validando webhook:", str(e))
-        raise HTTPException(status_code=400, detail="Webhook inválido")
+        print("❌ Error validando webhook:", repr(e))
+        return {"ok": False}
 
     try:
 
@@ -79,21 +79,26 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if event["type"] != "checkout.session.completed":
             return {"ok": True}
 
-        session = event["data"]["object"]
+        # 🔥 FIX REAL: obtener session completa desde Stripe
+        session_id = event["data"]["object"]["id"]
 
-        # 🔥 FIX CRÍTICO
-        session_data = dict(session)
+        session = stripe.checkout.Session.retrieve(session_id)
 
-        print("💳 SESSION ID:", session_data.get("id"))
+        print("💳 SESSION ID:", session.get("id"))
 
-        metadata = session_data.get("metadata") or {}
+        metadata = session.get("metadata") or {}
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
+
+        print("📦 METADATA:", metadata)
 
         if not orden_id:
             print("❌ Sin orden_id")
             return {"ok": True}
 
+        # =========================
+        # BUSCAR ORDEN
+        # =========================
         orden = db.query(Orden)\
             .filter_by(id=orden_id)\
             .with_for_update()\
@@ -103,6 +108,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             print("❌ Orden no encontrada")
             return {"ok": True}
 
+        # =========================
+        # EVITAR DUPLICADOS
+        # =========================
         if orden.estado == "pagado":
             print("⚠️ Duplicado ignorado")
             return {"ok": True}
@@ -111,8 +119,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         # MARCAR PAGADO
         # =========================
         orden.estado = "pagado"
-        orden.stripe_payment_intent = session_data.get("payment_intent")
+        orden.stripe_payment_intent = session.get("payment_intent")
 
+        # =========================
+        # DESBLOQUEAR EVALUACIÓN
+        # =========================
         evaluacion = db.query(Evaluacion)\
             .filter_by(id=orden.evaluacion_id)\
             .first()
@@ -138,8 +149,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
     except Exception as e:
         db.rollback()
-        print("💥 ERROR WEBHOOK:", str(e))
-        raise HTTPException(status_code=500, detail="Error interno webhook")
+        print("💥 ERROR WEBHOOK COMPLETO:", repr(e))
+        return {"ok": False}
 
     return {"ok": True}
 
