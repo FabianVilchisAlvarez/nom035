@@ -50,7 +50,7 @@ def obtener_plan_por_empleados(empleados: int) -> str:
 
 
 # =========================
-# 🔥 STRIPE WEBHOOK (FINAL FIX)
+# 🔥 STRIPE WEBHOOK (FIX PRO)
 # =========================
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
@@ -66,34 +66,33 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             sig_header,
             settings.STRIPE_WEBHOOK_SECRET
         )
-
     except Exception as e:
         print("❌ Error validando webhook:", repr(e))
         return {"ok": False}
 
     try:
-
         # =========================
         # SOLO EVENTO IMPORTANTE
         # =========================
         if event["type"] != "checkout.session.completed":
             return {"ok": True}
 
-        # 🔥 obtener session completa real
-        session_id = event["data"]["object"]["id"]
-        session = stripe.checkout.Session.retrieve(session_id)
+        session_data = event["data"]["object"]
 
-        print("💳 SESSION ID:", session.id)
+        print("💳 SESSION ID:", session_data.get("id"))
 
         # =========================
-        # METADATA SEGURA
+        # 🔥 METADATA (SIN RETRIEVE)
         # =========================
-        metadata = session.get("metadata", {})
+        metadata = session_data.get("metadata", {}) or {}
+
+        # 🔒 asegurar dict real
+        metadata = dict(metadata)
 
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
 
-        payment_intent = getattr(session, "payment_intent", None)
+        payment_intent = session_data.get("payment_intent")
 
         print("📦 METADATA:", metadata)
 
