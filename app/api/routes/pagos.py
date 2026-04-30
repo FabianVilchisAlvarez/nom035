@@ -50,7 +50,7 @@ def obtener_plan_por_empleados(empleados: int) -> str:
 
 
 # =========================
-# 🔥 STRIPE WEBHOOK (PRO FIX FINAL)
+# 🔥 STRIPE WEBHOOK (FINAL FIX)
 # =========================
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
@@ -79,16 +79,20 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if event["type"] != "checkout.session.completed":
             return {"ok": True}
 
-        # 🔥 FIX REAL: obtener session completa desde Stripe
+        # 🔥 obtener session completa real
         session_id = event["data"]["object"]["id"]
-
         session = stripe.checkout.Session.retrieve(session_id)
 
-        print("💳 SESSION ID:", session.get("id"))
+        print("💳 SESSION ID:", session.id)
 
-        metadata = session.get("metadata") or {}
+        # =========================
+        # METADATA SEGURA
+        # =========================
+        metadata = getattr(session, "metadata", {}) or {}
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
+
+        payment_intent = getattr(session, "payment_intent", None)
 
         print("📦 METADATA:", metadata)
 
@@ -119,7 +123,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         # MARCAR PAGADO
         # =========================
         orden.estado = "pagado"
-        orden.stripe_payment_intent = session.get("payment_intent")
+        orden.stripe_payment_intent = payment_intent
 
         # =========================
         # DESBLOQUEAR EVALUACIÓN
