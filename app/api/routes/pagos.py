@@ -55,10 +55,10 @@ def obtener_plan_por_empleados(empleados: int) -> str:
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
+    print("🔥 WEBHOOK RECIBIDO")
+
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
-
-    print("🔥 WEBHOOK RECIBIDO")
 
     try:
         event = stripe.Webhook.construct_event(
@@ -66,6 +66,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             sig_header,
             settings.STRIPE_WEBHOOK_SECRET
         )
+
     except Exception as e:
         print("❌ Error validando webhook:", str(e))
         raise HTTPException(status_code=400, detail="Webhook inválido")
@@ -73,38 +74,26 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     try:
 
         # =========================
-        # 🔥 SOLO ESTE EVENTO
+        # SOLO EVENTO IMPORTANTE
         # =========================
         if event["type"] != "checkout.session.completed":
             return {"ok": True}
 
         session = event["data"]["object"]
 
-        print("💳 SESSION RECIBIDA:", session.get("id"))
+        # 🔥 FIX CRÍTICO
+        session_data = dict(session)
 
-        # =========================
-        # 🔥 VALIDAR PAGO REAL
-        # =========================
-        if session.get("payment_status") != "paid":
-            print("⚠️ Pago no completado aún")
-            return {"ok": True}
+        print("💳 SESSION ID:", session_data.get("id"))
 
-        # =========================
-        # 🔥 METADATA
-        # =========================
-        metadata = session.get("metadata") or {}
+        metadata = session_data.get("metadata") or {}
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
 
-        print("📦 METADATA:", metadata)
-
         if not orden_id:
-            print("❌ Sin orden_id en metadata")
+            print("❌ Sin orden_id")
             return {"ok": True}
 
-        # =========================
-        # 🔥 BUSCAR ORDEN
-        # =========================
         orden = db.query(Orden)\
             .filter_by(id=orden_id)\
             .with_for_update()\
@@ -114,41 +103,29 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             print("❌ Orden no encontrada")
             return {"ok": True}
 
-        # =========================
-        # 🚫 EVITAR DUPLICADOS
-        # =========================
         if orden.estado == "pagado":
-            print("⚠️ Ya estaba pagado (duplicado)")
+            print("⚠️ Duplicado ignorado")
             return {"ok": True}
 
         # =========================
-        # ✅ MARCAR PAGADO
+        # MARCAR PAGADO
         # =========================
         orden.estado = "pagado"
-        orden.stripe_payment_intent = session.get("payment_intent")
+        orden.stripe_payment_intent = session_data.get("payment_intent")
 
-        # =========================
-        # 🔥 DESBLOQUEAR EVALUACIÓN
-        # =========================
         evaluacion = db.query(Evaluacion)\
             .filter_by(id=orden.evaluacion_id)\
             .first()
 
         if evaluacion:
             evaluacion.pagado = True
-
             print("✅ Evaluación desbloqueada")
 
-            # =========================
-            # 🏢 PLAN EMPRESA
-            # =========================
             if tipo == "principal":
-
                 evaluacion.plan = orden.plan
 
                 empresa = db.query(Empresa)\
                     .filter_by(id=evaluacion.empresa_id)\
-                    .with_for_update()\
                     .first()
 
                 if empresa and not empresa.plan:
@@ -157,7 +134,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
         db.commit()
 
-        print("💰 PAGO PROCESADO CORRECTAMENTE")
+        print("💰 WEBHOOK PROCESADO OK")
 
     except Exception as e:
         db.rollback()
