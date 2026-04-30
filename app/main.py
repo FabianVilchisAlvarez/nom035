@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.database.connection import engine
 from app.database.base import Base
 
-# 🔥 IMPORTAR MODELOS
+# 🔥 MODELOS
 from app.models.usuario import Usuario
 from app.models.empresa import Empresa
 from app.models.evaluacion import Evaluacion
@@ -33,22 +33,26 @@ from app.api.routes import reportes
 from app.api.routes import pagos
 
 
+# =========================
+# 🚀 APP
+# =========================
 app = FastAPI(
     title="NOM-035 SaaS PRO",
     version="1.0.0"
 )
 
 # =========================
-# 🧨 DB (SOLO DESARROLLO)
+# 🧨 DB (solo dev)
 # =========================
 if settings.ENV == "development":
     Base.metadata.create_all(bind=engine)
 
 # =========================
-# 🌐 CORS
+# 🌐 CORS (PRODUCCIÓN FIX)
 # =========================
 origins = [
-    "https://nom035-frontend.onrender.com"
+    "https://nom035-frontend.onrender.com",
+    "http://localhost:5173"
 ]
 
 app.add_middleware(
@@ -57,10 +61,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # =========================
-# 🔥 ROUTERS
+# 🔥 ROUTES
 # =========================
 app.include_router(auth.router)
 app.include_router(evaluaciones.router)
@@ -72,13 +77,12 @@ app.include_router(reportes.router)
 app.include_router(pagos.router, prefix="/pagos", tags=["Pagos"])
 
 # =========================
-# ❤️ HEALTH CHECK (RENDER)
+# ❤️ HEALTH CHECK
 # =========================
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
 
-# (opcional mantener este)
 @app.get("/health")
 def health():
     return {"status": "ok"}
