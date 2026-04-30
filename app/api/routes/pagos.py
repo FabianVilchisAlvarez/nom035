@@ -88,7 +88,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         # =========================
         # METADATA SEGURA
         # =========================
-        metadata = getattr(session, "metadata", {}) or {}
+        metadata = session.get("metadata", {})
+
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
 
