@@ -64,6 +64,19 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+from fastapi.responses import Response
+
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://nom035-frontend.onrender.com",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 # =========================
 # 🔥 ROUTES
 # =========================
