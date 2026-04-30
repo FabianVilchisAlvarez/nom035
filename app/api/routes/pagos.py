@@ -58,6 +58,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
+    print("🔥 WEBHOOK RECIBIDO")
+
     try:
         event = stripe.Webhook.construct_event(
             payload,
@@ -69,75 +71,97 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Webhook inválido")
 
     try:
-        # ✅ SOLO PROCESAR ESTE EVENTO
+
+        # =========================
+        # 🔥 SOLO ESTE EVENTO
+        # =========================
         if event["type"] != "checkout.session.completed":
             return {"ok": True}
 
         session = event["data"]["object"]
-        session_data = session.to_dict()
 
-        if session_data.get("payment_status") != "paid":
+        print("💳 SESSION RECIBIDA:", session.get("id"))
+
+        # =========================
+        # 🔥 VALIDAR PAGO REAL
+        # =========================
+        if session.get("payment_status") != "paid":
+            print("⚠️ Pago no completado aún")
             return {"ok": True}
 
-        metadata = session_data.get("metadata", {})
+        # =========================
+        # 🔥 METADATA
+        # =========================
+        metadata = session.get("metadata") or {}
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
 
+        print("📦 METADATA:", metadata)
+
         if not orden_id:
+            print("❌ Sin orden_id en metadata")
             return {"ok": True}
 
-        # 🔒 LOCK para evitar doble procesamiento
+        # =========================
+        # 🔥 BUSCAR ORDEN
+        # =========================
         orden = db.query(Orden)\
             .filter_by(id=orden_id)\
             .with_for_update()\
             .first()
 
         if not orden:
+            print("❌ Orden no encontrada")
             return {"ok": True}
 
+        # =========================
         # 🚫 EVITAR DUPLICADOS
+        # =========================
         if orden.estado == "pagado":
-            print("⚠️ Evento duplicado ignorado")
+            print("⚠️ Ya estaba pagado (duplicado)")
             return {"ok": True}
 
-        # ✅ MARCAR ORDEN PAGADA
+        # =========================
+        # ✅ MARCAR PAGADO
+        # =========================
         orden.estado = "pagado"
-        orden.stripe_payment_intent = session_data.get("payment_intent")
+        orden.stripe_payment_intent = session.get("payment_intent")
 
-        # ✅ DESBLOQUEAR EVALUACIÓN
-        evaluacion = db.query(Evaluacion).filter_by(
-            id=orden.evaluacion_id
-        ).first()
+        # =========================
+        # 🔥 DESBLOQUEAR EVALUACIÓN
+        # =========================
+        evaluacion = db.query(Evaluacion)\
+            .filter_by(id=orden.evaluacion_id)\
+            .first()
 
         if evaluacion:
             evaluacion.pagado = True
 
+            print("✅ Evaluación desbloqueada")
+
+            # =========================
+            # 🏢 PLAN EMPRESA
+            # =========================
             if tipo == "principal":
+
                 evaluacion.plan = orden.plan
 
-                # 🔥 GUARDAR PLAN EN EMPRESA (CLAVE SaaS)
-                empresa = db.query(Empresa).filter_by(
-                    id=evaluacion.empresa_id
-                ).with_for_update().first()
+                empresa = db.query(Empresa)\
+                    .filter_by(id=evaluacion.empresa_id)\
+                    .with_for_update()\
+                    .first()
 
-                if empresa:
-                    # 🔒 SOLO asignar si no tiene plan (evita cambios)
-                    if not empresa.plan:
-                        empresa.plan = orden.plan
-                        print(f"🏢 Plan asignado a empresa: {orden.plan}")
-                    else:
-                        print("⚠️ Empresa ya tiene plan, no se modifica")
-
-                print("✅ Evaluación principal desbloqueada")
-
-            elif tipo == "adicional":
-                print("✅ Evaluación adicional desbloqueada")
+                if empresa and not empresa.plan:
+                    empresa.plan = orden.plan
+                    print(f"🏢 Plan asignado: {orden.plan}")
 
         db.commit()
-        print("✅ Pago aplicado correctamente")
+
+        print("💰 PAGO PROCESADO CORRECTAMENTE")
 
     except Exception as e:
-        print("💥 Error webhook:", str(e))
+        db.rollback()
+        print("💥 ERROR WEBHOOK:", str(e))
         raise HTTPException(status_code=500, detail="Error interno webhook")
 
     return {"ok": True}
