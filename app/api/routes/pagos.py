@@ -79,20 +79,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
         session_data = event["data"]["object"]
 
-        print("💳 SESSION ID:", session_data.get("id"))
+        print("🔎 TIPO SESSION:", type(session_data))
 
-        # =========================
-        # 🔥 METADATA (SIN RETRIEVE)
-        # =========================
-        metadata = session_data.get("metadata", {}) or {}
+        # 🔥 CONVERTIR A DICT REAL (FIX CLAVE)
+        session_dict = session_data.to_dict()
 
-        # 🔒 asegurar dict real
-        metadata = dict(metadata)
+        print("💳 SESSION ID:", session_dict.get("id"))
+
+        metadata = session_dict.get("metadata", {})
 
         orden_id = metadata.get("orden_id")
         tipo = metadata.get("tipo", "principal")
 
-        payment_intent = session_data.get("payment_intent")
+        payment_intent = session_dict.get("payment_intent")
 
         print("📦 METADATA:", metadata)
 
