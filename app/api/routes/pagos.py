@@ -17,18 +17,18 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 # 💰 PRECIOS BASE
 # =========================
 PRECIOS = {
-    "micro": 6900,
-    "mediana": 29900,
-    "grande": 49900,
-    "corporativo": 79900
+    "micro": 10,
+    "mediana": 10,
+    "grande": 10,
+    "corporativo": 10
 }
 
 # =========================
 # ➕ PRECIOS ADICIONALES
 # =========================
 PRECIOS_ADICIONALES = {
-    "micro": 3900,
-    "mediana": 19900,
+    "micro": 10,
+    "mediana": 10,
     "grande": 29900,
     "corporativo": 49900
 }
